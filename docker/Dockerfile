@@ -55,7 +55,7 @@ RUN set -eux; \
     python -m pip install wheel; \
     python -m pip install -r requirements.txt; \
     python -m pip install -r requirements-contribs.txt; \
-    python -m pip install psycopg2-binary; \
+    python -m pip install psycopg2-binary==2.8.6; \
     python manage.py compilemessages; \
     python manage.py collectstatic --no-input; \
     chmod +x docker/entrypoint.sh; \
