@@ -1,0 +1,118 @@
+name: Build
+on:
+  push:
+    branches:
+      - deploy/jhatkaa
+
+env:
+  APP_NAME: taiga-back
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@main
+
+      - name: Slack Build Starting Notification
+        if: success()
+        id: slack
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_TOKEN }}
+        uses: voxmedia/github-action-slack-notify-build@v1
+        with:
+          channel: ${{ secrets.SLACK_CHANNEL }}
+          status: STARTING
+          color: warning
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ap-south-1
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+
+      - uses: satackey/action-docker-layer-caching@v0.0.11
+        # Ignore the failure of a step and avoid terminating the job.
+        continue-on-error: true
+
+      - name: Build, tag, and push image to Amazon ECR
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: ${{ env.APP_NAME }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -f docker/Dockerfile -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+
+      - name: Slack Build Success Notification
+        if: success()
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_TOKEN }}
+        uses: voxmedia/github-action-slack-notify-build@v1
+        with:
+          message_id: ${{ steps.slack.outputs.message_id }}
+          channel: ${{ secrets.SLACK_CHANNEL }}
+          status: SUCCESS
+          color: good
+
+      - name: Slack Build Failure Notification
+        if: failure()
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_TOKEN }}
+        uses: voxmedia/github-action-slack-notify-build@v1
+        with:
+          message_id: ${{ steps.slack.outputs.message_id }}
+          channel: ${{ secrets.SLACK_CHANNEL }}
+          status: FAILED
+          color: danger
+
+      - name: Slack Image Tag Pushed Notification
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_TOKEN }}
+          IMAGE_TAG: ${{ github.sha }}
+          REPOSITORY_NAME: ${{ env.APP_NAME }}
+          SLACK_CHANNEL: ${{ secrets.SLACK_CHANNEL }}
+        run: |
+          curl --location --request POST 'https://slack.com/api/chat.postMessage' \
+          --header "Authorization: Bearer $SLACK_BOT_TOKEN" \
+          --header 'Content-Type: application/json' \
+          --data-raw '
+          {
+            "channel": "'"$SLACK_CHANNEL"'",
+            "attachments": [
+              {
+                "fallback": "New Docker Image Available on ECR for '"$REPOSITORY_NAME"'",
+                "blocks": [
+                  {
+                    "type": "section",
+                    "text": {
+                      "text": "New Docker Image Available on ECR",
+                      "type": "mrkdwn"
+                    },
+                    "fields": [
+                      {
+                        "type": "mrkdwn",
+                        "text": "*Image ID*"
+                      },
+                      {
+                        "type": "mrkdwn",
+                        "text": "*Application*"
+                      },
+                      {
+                        "type": "plain_text",
+                        "text": "'"$IMAGE_TAG"'"
+                      },
+                      {
+                        "type": "mrkdwn",
+                        "text": "'"$REPOSITORY_NAME"'"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }'

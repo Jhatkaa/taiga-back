@@ -24,7 +24,7 @@ def user_project_settings_exists(project, user) -> bool:
     return qs.exists()
 
 
-def create_user_project_settings(project, user, homepage=Section.timeline):
+def create_user_project_settings(project, user, homepage=Section.wiki):
     """
     Given a project and user, create notification policy for it.
     """
@@ -39,7 +39,7 @@ def create_user_project_settings(project, user, homepage=Section.timeline):
 
 
 def create_user_project_settings_if_not_exists(project, user,
-                                               homepage=Section.timeline):
+                                               homepage=Section.wiki):
     """
     Given a project and user, create notification policy for it.
     """
